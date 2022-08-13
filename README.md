@@ -3,9 +3,15 @@
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/rom1504/gpu_tester/blob/master/notebook/gpu_tester_getting_started.ipynb)
 [![Try it on gitpod](https://img.shields.io/badge/try-on%20gitpod-brightgreen.svg)](https://gitpod.io/#https://github.com/rom1504/gpu_tester)
 
-A nice template to start with
+Gpu tester finds all your bad gpus.
+
+Works on slurm.
 
 ## Install
+
+pip3 install torch --extra-index-url https://download.pytorch.org/whl/cu116
+
+then 
 
 pip install gpu_tester
 
@@ -16,9 +22,15 @@ Checkout these examples to call this as a lib:
 
 ## API
 
-This module exposes a single function `hello_world` which takes the same arguments as the command line tool:
+This module exposes a single function `gpu_tester` which takes the same arguments as the command line tool:
 
-* **message** the message to print. (*required*)
+* **cluster** the cluster. (default *slurm*)
+* **job_name** slurm job name. (default *gpu_tester*)
+* **partition** slurm partition. (default *compute-od-gpu*)
+* **gpu_per_node** numbe of gpu per node. (default *8*)
+* **nodes** number of gpu nodes. (default *1*)
+* **output_folder** the output folder. (default *None* which means current folder / results)
+* **job_timeout** job timeout (default *300* seconds)
 
 ## For development
 

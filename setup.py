@@ -24,6 +24,7 @@ if __name__ == "__main__":
         long_description_content_type="text/markdown",
         author="Romain Beaumont",
         author_email="romain.rom1@gmail.com",
+        entry_points={"console_scripts": ["gpu_tester = gpu_tester:main"]},
         url="https://github.com/rom1504/gpu_tester",
         data_files=[(".", ["README.md"])],
         keywords=["machine learning"],
