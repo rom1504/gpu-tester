@@ -32,7 +32,13 @@ def start_job(sbatch_file):
 
 
 def gpu_tester(
-    cluster="slurm", job_name="gpu_tester", partition="compute-od-gpu", gpu_per_node=8, nodes=1, output_folder=None, job_timeout=300
+    cluster="slurm",
+    job_name="gpu_tester",
+    partition="compute-od-gpu",
+    gpu_per_node=8,
+    nodes=1,
+    output_folder=None,
+    job_timeout=300,
 ):
     """gpu tester main function"""
     if cluster != "slurm":
