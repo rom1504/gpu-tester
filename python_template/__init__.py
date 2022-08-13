@@ -1,3 +1,3 @@
-"""python_template"""
+"""gpu_tester"""
 
-from python_template.main import hello_world
+from gpu_tester.main import hello_world

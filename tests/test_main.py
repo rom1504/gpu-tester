@@ -1,5 +1,5 @@
 import pytest
-from python_template import hello_world
+from gpu_tester import hello_world
 
 
 @pytest.mark.parametrize("message", ["hello", "world"])

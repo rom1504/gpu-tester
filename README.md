@@ -1,13 +1,13 @@
-# python_template
-[![pypi](https://img.shields.io/pypi/v/python_template.svg)](https://pypi.python.org/pypi/python_template)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/rom1504/python_template/blob/master/notebook/python_template_getting_started.ipynb)
-[![Try it on gitpod](https://img.shields.io/badge/try-on%20gitpod-brightgreen.svg)](https://gitpod.io/#https://github.com/rom1504/python_template)
+# gpu_tester
+[![pypi](https://img.shields.io/pypi/v/gpu_tester.svg)](https://pypi.python.org/pypi/gpu_tester)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/rom1504/gpu_tester/blob/master/notebook/gpu_tester_getting_started.ipynb)
+[![Try it on gitpod](https://img.shields.io/badge/try-on%20gitpod-brightgreen.svg)](https://gitpod.io/#https://github.com/rom1504/gpu_tester)
 
 A nice template to start with
 
 ## Install
 
-pip install python_template
+pip install gpu_tester
 
 ## Python examples
 
@@ -22,7 +22,7 @@ This module exposes a single function `hello_world` which takes the same argumen
 
 ## For development
 
-Either locally, or in [gitpod](https://gitpod.io/#https://github.com/rom1504/python_template) (do `export PIP_USER=false` there)
+Either locally, or in [gitpod](https://gitpod.io/#https://github.com/rom1504/gpu_tester) (do `export PIP_USER=false` there)
 
 Setup a virtualenv:
 
