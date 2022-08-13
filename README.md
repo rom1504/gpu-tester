@@ -27,6 +27,19 @@ pip install gpu_tester
 Checkout these examples to call this as a lib:
 * [example.py](examples/example.py)
 
+## Output
+
+Output looks like this:
+
+```
+job succeeded
+0 have incorrect results, 1 have gpu errors and 319 succeeded
+incorrect results:
+[]
+gpu errors:
+[['gpu_error', 'compute-od-gpu-st-p4d-24xlarge-156', '3']]
+```
+
 ## API
 
 This module exposes a single function `gpu_tester` which takes the same arguments as the command line tool:
