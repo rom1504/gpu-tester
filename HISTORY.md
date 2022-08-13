@@ -1,3 +1,3 @@
 ## 1.0.0
 
-* it works
+* support forward test
