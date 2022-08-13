@@ -22,10 +22,15 @@ def wait_for_job_to_finish(job_id, timeout=30):
             return True
 
 
-def start_job(sbatch_file, sbatch_args):
-    sbatch_output = subprocess.check_output(
-        ["sbatch"] + ([sbatch_args] if sbatch_args is not None else []) + [sbatch_file]
-    ).decode("utf8")
+def start_job(sbatch_file, job_comment):
+    """start job"""
+    args = ["sbatch"]
+    if job_comment:
+        args.append("--comment")
+        args.append(job_comment)
+    args.append(sbatch_file)
+    sbatch_output = subprocess.check_output(args).decode("utf8")
+
     parsed_sbatch = sbatch_output.split(" ")
     if parsed_sbatch[0] != "Submitted":
         raise ValueError(f"slurm sbatch failed: {sbatch_output}")
@@ -41,7 +46,7 @@ def gpu_tester(
     nodes=1,
     output_folder=None,
     job_timeout=300,
-    sbatch_args=None,
+    job_comment=None,
 ):
     """gpu tester main function"""
     if cluster != "slurm":
@@ -51,13 +56,13 @@ def gpu_tester(
     if not os.path.isdir(output_folder):
         os.mkdir(output_folder)
     tmp_file = output_folder + "/sbatch_output"
-    sbatch_content = generate_sbatch(job_name, partition, nodes, gpu_per_node, tmp_file, sbatch_args)
+    sbatch_content = generate_sbatch(job_name, partition, nodes, gpu_per_node, tmp_file, job_comment)
     sbatch_file = output_folder + "/sbatch_file"
     with open(sbatch_file, "w", encoding="utf8") as f:
         f.write(sbatch_content)
 
     print("starting job")
-    job_id = start_job(sbatch_file, sbatch_args)
+    job_id = start_job(sbatch_file, job_comment)
     print(f"waiting for job {job_id}")
     status = wait_for_job_to_finish(job_id, job_timeout)
     if not status:
@@ -132,11 +137,12 @@ echo $HOSTNAMES
 """
 
 
-def generate_sbatch(job_name, partition, nodes, gpu_per_node, output_file, sbatch_args):
+def generate_sbatch(job_name, partition, nodes, gpu_per_node, output_file, job_comment):
     ntasks_per_node = gpu_per_node
     gres = f"gpu:{gpu_per_node}"
     constant_boilerplate = get_boilerplate()
     venv = os.environ["VIRTUAL_ENV"]
+    scomment = ("--comment " + job_comment) if job_comment is not None else ""
 
     return f"""#!/bin/bash
 #SBATCH --partition={partition}
@@ -152,7 +158,7 @@ def generate_sbatch(job_name, partition, nodes, gpu_per_node, output_file, sbatc
 source {venv}/bin/activate
 
 
-srun {sbatch_args if sbatch_args is not None else ""} --cpu_bind=v --accel-bind=gn python -m gpu_tester.worker
+srun {scomment} --cpu_bind=v --accel-bind=gn python -m gpu_tester.worker
 """
 
 

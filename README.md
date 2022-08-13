@@ -51,7 +51,7 @@ This module exposes a single function `gpu_tester` which takes the same argument
 * **nodes** number of gpu nodes. (default *1*)
 * **output_folder** the output folder. (default *None* which means current folder / results)
 * **job_timeout** job timeout (default *300* seconds)
-* **sbatch_args** optional additional sbatch and srun args, example "--comment Laion" (default *None*)
+* **job_comment** optional comment arg given to slurm (default *None*)
 
 ## For development
 
