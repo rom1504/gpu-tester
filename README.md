@@ -1,11 +1,18 @@
 # gpu_tester
 [![pypi](https://img.shields.io/pypi/v/gpu_tester.svg)](https://pypi.python.org/pypi/gpu_tester)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/rom1504/gpu_tester/blob/master/notebook/gpu_tester_getting_started.ipynb)
-[![Try it on gitpod](https://img.shields.io/badge/try-on%20gitpod-brightgreen.svg)](https://gitpod.io/#https://github.com/rom1504/gpu_tester)
 
 Gpu tester finds all your bad gpus.
 
 Works on slurm.
+
+Features:
+* does a forward on each gpu
+* check for gpu returning incorrect results
+* check for gpu failing due to ECC errors
+
+Roadmap:
+* sanity check forward speed
+* sanity check broadcast speed
 
 ## Install
 
