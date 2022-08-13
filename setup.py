@@ -17,7 +17,7 @@ if __name__ == "__main__":
         name="gpu_tester",
         packages=find_packages(),
         include_package_data=True,
-        version="1.0.1",
+        version="1.0.2",
         license="MIT",
         description="A python template",
         long_description=long_description,
