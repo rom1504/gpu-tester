@@ -22,81 +22,20 @@ def wait_for_job_to_finish(job_id, timeout=30):
             return True
 
 
-def start_job(sbatch_file, job_comment):
+def start_job(sbatch_file):
     """start job"""
     args = ["sbatch"]
-    if job_comment:
-        args.append("--comment")
-        args.append(job_comment)
     args.append(sbatch_file)
     sbatch_output = subprocess.check_output(args).decode("utf8")
+    lines = sbatch_output.split("\n")
 
-    parsed_sbatch = sbatch_output.split(" ")
-    if parsed_sbatch[0] != "Submitted":
+    lines = [line for line in lines if "Submitted" in line]
+    if len(lines) == 0:
         raise ValueError(f"slurm sbatch failed: {sbatch_output}")
+
+    parsed_sbatch = lines[0].split(" ")
     job_id = parsed_sbatch[3].strip()
     return job_id
-
-
-def gpu_tester(
-    cluster="slurm",
-    job_name="gpu_tester",
-    partition="compute-od-gpu",
-    gpu_per_node=8,
-    nodes=1,
-    output_folder=None,
-    job_timeout=300,
-    job_comment=None,
-):
-    """gpu tester main function"""
-    if cluster != "slurm":
-        raise ValueError("only slurm is supported currently")
-    if output_folder is None:
-        output_folder = os.getcwd() + "/results"
-    if not os.path.isdir(output_folder):
-        os.mkdir(output_folder)
-    tmp_file = output_folder + "/sbatch_output"
-    sbatch_content = generate_sbatch(job_name, partition, nodes, gpu_per_node, tmp_file, job_comment)
-    sbatch_file = output_folder + "/sbatch_file"
-    with open(sbatch_file, "w", encoding="utf8") as f:
-        f.write(sbatch_content)
-
-    print("starting job")
-    job_id = start_job(sbatch_file, job_comment)
-    print(f"waiting for job {job_id}")
-    status = wait_for_job_to_finish(job_id, job_timeout)
-    if not status:
-        print(f"canceling {job_id}")
-        subprocess.check_output(["scancel", job_id]).decode("utf8")
-        status = wait_for_job_to_finish(job_id)
-        raise ValueError("job cancelled")
-    print("job succeeded")
-
-    with open(tmp_file, "r", encoding="utf8") as f:
-        result_output = f.read()
-
-    results = result_output.split("\n")
-
-    error_gpu = [r for r in results if "gpu_error" in r]
-    error_gpus = [r.split(" ") for r in error_gpu]
-
-    real_results = [r for r in results if "result" in r]
-    if len(real_results) == 0:
-        raise ValueError(f"failed, output is {result_output}")
-
-    parsed_results = [r.split(" ") for r in real_results]
-    failed_wrong_results = [r for r in parsed_results if r[3] != "26.186691"]
-
-    failed_count = len(failed_wrong_results)
-    success_count = len(parsed_results) - failed_count
-
-    print(f"{failed_count} have incorrect results, {len(error_gpus)} have gpu errors and {success_count} succeeded")
-
-    print("incorrect results:")
-    print(failed_wrong_results)
-
-    print("gpu errors:")
-    print(error_gpus)
 
 
 def get_boilerplate():
@@ -127,22 +66,23 @@ export TORCH_DISTRIBUTED_DEBUG=INFO
 
 # sent to sub script
 export HOSTNAMES=`scontrol show hostnames "$SLURM_JOB_NODELIST"`
-echo $HOSTNAMES
+echo hosts $HOSTNAMES
 export MASTER_ADDR=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
 export MASTER_PORT=12802
 export COUNT_NODE=`scontrol show hostnames "$SLURM_JOB_NODELIST" | wc -l`
 
 echo go $COUNT_NODE
-echo $HOSTNAMES
 """
 
 
-def generate_sbatch(job_name, partition, nodes, gpu_per_node, output_file, job_comment):
+def generate_sbatch(job_name, partition, nodes, gpu_per_node, output_file, job_comment, test_kind):
     ntasks_per_node = gpu_per_node
     gres = f"gpu:{gpu_per_node}"
     constant_boilerplate = get_boilerplate()
     venv = os.environ["VIRTUAL_ENV"]
     scomment = ("--comment " + job_comment) if job_comment is not None else ""
+    sbatch_scomment = ("#SBATCH --comment " + job_comment) if job_comment is not None else ""
+    worker = test_kind + "_worker"
 
     return f"""#!/bin/bash
 #SBATCH --partition={partition}
@@ -152,14 +92,106 @@ def generate_sbatch(job_name, partition, nodes, gpu_per_node, output_file, job_c
 #SBATCH --gres={gres}
 #SBATCH --output={output_file}
 #SBATCH --exclusive
+{sbatch_scomment}
 
 {constant_boilerplate}
 
 source {venv}/bin/activate
 
 
-srun {scomment} --cpu_bind=v --accel-bind=gn python -m gpu_tester.worker
+srun {scomment} --cpu_bind=v --accel-bind=gn python -m gpu_tester.{worker}
 """
+
+
+def gpu_tester(
+    cluster="slurm",
+    job_name="gpu_tester",
+    partition="compute-od-gpu",
+    gpu_per_node=8,
+    nodes=1,
+    output_folder=None,
+    job_timeout=150,
+    job_comment=None,
+    test_kind="simple_forward",
+):
+    """gpu tester main function"""
+    if cluster != "slurm":
+        raise ValueError("only slurm is supported currently")
+    if output_folder is None:
+        output_folder = os.getcwd() + "/results"
+    if not os.path.isdir(output_folder):
+        os.mkdir(output_folder)
+    tmp_file = output_folder + "/sbatch_output"
+    sbatch_content = generate_sbatch(job_name, partition, nodes, gpu_per_node, tmp_file, job_comment, test_kind)
+    sbatch_file = output_folder + "/sbatch_file"
+    with open(sbatch_file, "w", encoding="utf8") as f:
+        f.write(sbatch_content)
+
+    print("starting job")
+    job_id = start_job(sbatch_file)
+    print(f"waiting for job {job_id}")
+    status = wait_for_job_to_finish(job_id, job_timeout)
+    if not status:
+        print(f"canceling {job_id}")
+        subprocess.check_output(["scancel", job_id]).decode("utf8")
+        status = wait_for_job_to_finish(job_id)
+        raise ValueError("job cancelled")
+    print("job succeeded")
+
+    with open(tmp_file, "r", encoding="utf8") as f:
+        result_output = f.read()
+
+    results = result_output.split("\n")
+    hosts = [h for h in results if "hosts" in h]
+    if len(hosts) == 0:
+        raise ValueError("failed" + result_output)
+    hosts = hosts[0].split(" ")[1:]
+    hosts_gpus = [h + " " + str(gpu) for gpu in range(8) for h in hosts]
+
+    if test_kind == "simple_forward":
+
+        error_gpu = [r for r in results if "gpu_error" in r]
+        error_gpus = [r.split(" ") for r in error_gpu]
+
+        real_results = [r for r in results if "result" in r]
+        if len(real_results) == 0:
+            raise ValueError(f"failed, output is {result_output}")
+
+        parsed_results = [r.split(" ") for r in real_results]
+        failed_wrong_results = [r for r in parsed_results if r[3] != "24954.1"]
+        slow_results = [r for r in parsed_results if float(r[4]) > 5]
+
+        failed_count = len(failed_wrong_results)
+
+        answered_host_gpu = set([e[1] + " " + e[2] for e in error_gpu] + [e[1] + " " + e[2] for e in parsed_results])
+
+        no_answer = list(set(hosts_gpus) - answered_host_gpu)
+        success_count = len(parsed_results) - failed_count - len(no_answer) - len(slow_results)
+
+        print(
+            f"""
+            * {failed_count} have incorrect results
+            * {len(slow_results)} have slow results
+            * {len(error_gpus)} have gpu errors
+            * {len(no_answer)} did not answer
+            * {success_count} succeeded
+             """
+        )
+
+        print("slow results:")
+        print(slow_results)
+
+        print("incorrect results:")
+        print(failed_wrong_results)
+
+        print("gpu errors:")
+        print(error_gpus)
+
+        print("no_answer:")
+        print(no_answer)
+
+    elif test_kind == "ddp":
+        print("no")
 
 
 def main():
