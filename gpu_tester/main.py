@@ -135,8 +135,9 @@ def gpu_tester(
         print(f"canceling {job_id}")
         subprocess.check_output(["scancel", job_id]).decode("utf8")
         status = wait_for_job_to_finish(job_id)
-        raise ValueError("job cancelled")
-    print("job succeeded")
+        print("job cancelled")
+    else:
+        print("job succeeded")
 
     with open(tmp_file, "r", encoding="utf8") as f:
         result_output = f.read()
@@ -148,50 +149,52 @@ def gpu_tester(
     hosts = hosts[0].split(" ")[1:]
     hosts_gpus = [h + " " + str(gpu) for gpu in range(8) for h in hosts]
 
+    error_gpu = [r for r in results if "gpu_error" in r]
+    error_gpus = [r.split(" ") for r in error_gpu]
+
+    real_results = [r for r in results if "result" in r]
+    if len(real_results) == 0:
+        raise ValueError(f"failed, output is {result_output}")
+
+    parsed_results = [r.split(" ") for r in real_results]
+
     if test_kind == "simple_forward":
-
-        error_gpu = [r for r in results if "gpu_error" in r]
-        error_gpus = [r.split(" ") for r in error_gpu]
-
-        real_results = [r for r in results if "result" in r]
-        if len(real_results) == 0:
-            raise ValueError(f"failed, output is {result_output}")
-
-        parsed_results = [r.split(" ") for r in real_results]
-        failed_wrong_results = [r for r in parsed_results if r[3] != "24954.1"]
-        slow_results = [r for r in parsed_results if float(r[4]) > 5]
-
-        failed_count = len(failed_wrong_results)
-
-        answered_host_gpu = set([e[1] + " " + e[2] for e in error_gpu] + [e[1] + " " + e[2] for e in parsed_results])
-
-        no_answer = list(set(hosts_gpus) - answered_host_gpu)
-        success_count = len(parsed_results) - failed_count - len(no_answer) - len(slow_results)
-
-        print(
-            f"""
-            * {failed_count} have incorrect results
-            * {len(slow_results)} have slow results
-            * {len(error_gpus)} have gpu errors
-            * {len(no_answer)} did not answer
-            * {success_count} succeeded
-             """
-        )
-
-        print("slow results:")
-        print(slow_results)
-
-        print("incorrect results:")
-        print(failed_wrong_results)
-
-        print("gpu errors:")
-        print(error_gpus)
-
-        print("no_answer:")
-        print(no_answer)
-
+        expected_value = "24954.1"
+        expected_delay = 5
     elif test_kind == "ddp":
-        print("no")
+        expected_value = "1.3285987"
+        expected_delay = 5
+    failed_wrong_results = [r for r in parsed_results if abs(float(r[3]) - float(expected_value)) > 0.01]
+    slow_results = [r for r in parsed_results if float(r[4]) > expected_delay]
+
+    failed_count = len(failed_wrong_results)
+
+    answered_host_gpu = set([e[1] + " " + e[2] for e in error_gpu] + [e[1] + " " + e[2] for e in parsed_results])
+
+    no_answer = list(set(hosts_gpus) - answered_host_gpu)
+    success_count = len(parsed_results) - failed_count - len(no_answer) - len(slow_results)
+
+    print(
+        f"""
+        * {failed_count} have incorrect results
+        * {len(slow_results)} have slow results
+        * {len(error_gpus)} have gpu errors
+        * {len(no_answer)} did not answer
+        * {success_count} succeeded
+            """
+    )
+
+    print("slow results:")
+    print(slow_results)
+
+    print("incorrect results:")
+    print(failed_wrong_results)
+
+    print("gpu errors:")
+    print(error_gpus)
+
+    print("no_answer:")
+    print(no_answer)
 
 
 def main():

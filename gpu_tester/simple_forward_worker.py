@@ -1,19 +1,15 @@
 """worker running in each gpu"""
 
 import torch
-import os
 import socket
 import time
+from .world_info_from_env import world_info_from_env
 
 torch.manual_seed(0)
 
 
 def main():
-    local_rank = 0
-    for v in ("LOCAL_RANK", "MPI_LOCALRANKID", "SLURM_LOCALID", "OMPI_COMM_WORLD_LOCAL_RANK"):
-        if v in os.environ:
-            local_rank = int(os.environ[v])
-            break
+    local_rank, _, _ = world_info_from_env()
 
     hostname = socket.gethostname()
     try:
