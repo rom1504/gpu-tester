@@ -16,11 +16,19 @@ Roadmap:
 
 ## Install
 
+Create a venv:
+
+```
+python3 -m venv .env
+source .env/bin/activate
+pip install -U pip
+```
+
+Then:
+```
 pip3 install torch --extra-index-url https://download.pytorch.org/whl/cu116
-
-then 
-
 pip install gpu_tester
+```
 
 ## Python examples
 
