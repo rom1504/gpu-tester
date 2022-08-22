@@ -4,6 +4,7 @@ import os
 import fire
 import subprocess
 import time
+from multiprocessing.pool import ThreadPool
 
 
 def is_job_finished(job_id):
@@ -75,7 +76,8 @@ echo go $COUNT_NODE
 """
 
 
-def generate_sbatch(job_name, partition, nodes, gpu_per_node, output_file, job_comment, test_kind):
+def generate_sbatch(job_name, partition, nodes, gpu_per_node, output_file, job_comment, test_kind, nodelist, exclude):
+    """generate sbatch"""
     ntasks_per_node = gpu_per_node
     gres = f"gpu:{gpu_per_node}"
     constant_boilerplate = get_boilerplate()
@@ -83,6 +85,8 @@ def generate_sbatch(job_name, partition, nodes, gpu_per_node, output_file, job_c
     scomment = ("--comment " + job_comment) if job_comment is not None else ""
     sbatch_scomment = ("#SBATCH --comment " + job_comment) if job_comment is not None else ""
     worker = test_kind + "_worker"
+    nodelist = ("#SBATCH --nodelist " + nodelist) if nodelist is not None else ""
+    exclude = ("#SBATCH --exclude " + exclude) if exclude is not None else ""
 
     return f"""#!/bin/bash
 #SBATCH --partition={partition}
@@ -93,6 +97,8 @@ def generate_sbatch(job_name, partition, nodes, gpu_per_node, output_file, job_c
 #SBATCH --output={output_file}
 #SBATCH --exclusive
 {sbatch_scomment}
+{nodelist}
+{exclude}
 
 {constant_boilerplate}
 
@@ -103,10 +109,18 @@ srun {scomment} --cpu_bind=v --accel-bind=gn python -m gpu_tester.{worker}
 """
 
 
-def run_test(output_folder, job_name, partition, nodes, gpu_per_node, job_comment, job_timeout, test_kind):
+def run_test(
+    output_folder, job_name, partition, nodes, gpu_per_node, job_comment, job_timeout, test_kind, nodelist, exclude
+):
     """run test"""
+
+    if not os.path.isdir(output_folder):
+        os.mkdir(output_folder)
+
     tmp_file = output_folder + "/sbatch_output"
-    sbatch_content = generate_sbatch(job_name, partition, nodes, gpu_per_node, tmp_file, job_comment, test_kind)
+    sbatch_content = generate_sbatch(
+        job_name, partition, nodes, gpu_per_node, tmp_file, job_comment, test_kind, nodelist, exclude
+    )
     sbatch_file = output_folder + "/sbatch_file"
     with open(sbatch_file, "w", encoding="utf8") as f:
         f.write(sbatch_content)
@@ -133,12 +147,18 @@ def run_test(output_folder, job_name, partition, nodes, gpu_per_node, job_commen
     hosts = hosts[0].split(" ")[1:]
     hosts_gpus = [h + " " + str(gpu) for gpu in range(8) for h in hosts]
 
+    status_dict = {}
+
+    for h in hosts_gpus:
+        status_dict[h] = ("no_answer", "")
+
     error_gpu = [r for r in results if "gpu_error" in r]
     error_gpus = [r.split(" ") for r in error_gpu]
 
+    for r in error_gpus:
+        status_dict[r[1] + " " + r[2]] = ("gpu_error", " ".join(r[3:]))
+
     real_results = [r for r in results if "result" in r]
-    if len(real_results) == 0:
-        raise ValueError(f"failed, output is {result_output}")
 
     parsed_results = [r.split(" ") for r in real_results]
 
@@ -148,36 +168,44 @@ def run_test(output_folder, job_name, partition, nodes, gpu_per_node, job_commen
     elif test_kind == "ddp":
         expected_value = None
         expected_delay = 5
-    failed_wrong_results = [
-        r for r in parsed_results if expected_value is not None and abs(float(r[3]) - float(expected_value)) > 0.01
-    ]
-    slow_results = [r for r in parsed_results if float(r[4]) > expected_delay]
 
-    failed_count = len(failed_wrong_results)
+    for r in parsed_results:
+        name = r[1] + " " + r[2]
+        if expected_value is not None and abs(float(r[3]) - float(expected_value)) > 0.01:
+            status_dict[name] = ("wrong", str(r[3]))
+        elif float(r[4]) > expected_delay:
+            status_dict[name] = ("slow", str(r[4]))
+        else:
+            status_dict[name] = ("success", "")
 
-    answered_host_gpu = set([e[1] + " " + e[2] for e in error_gpu] + [e[1] + " " + e[2] for e in parsed_results])
+    return status_dict
 
-    no_answer = list(set(hosts_gpus) - answered_host_gpu)
-    success_count = len(parsed_results) - failed_count - len(no_answer) - len(slow_results)
+
+def display_results(status_dict):
+    """display results"""
+    success = [x for x, y in status_dict.items() if y[0] == "success"]
+    slow = [x for x, y in status_dict.items() if y[0] == "slow"]
+    wrong = [x for x, y in status_dict.items() if y[0] == "wrong"]
+    gpu_error = [x for x, y in status_dict.items() if y[0] == "gpu_error"]
+    no_answer = [x for x, y in status_dict.items() if y[0] == "no_answer"]
 
     print(
-        f"""
-        * {failed_count} have incorrect results
-        * {len(slow_results)} have slow results
-        * {len(error_gpus)} have gpu errors
+        f"""on a total of {len(status_dict)}:
+        * {len(wrong)} have incorrect results
+        * {len(slow)} have slow results
+        * {len(gpu_error)} have gpu errors
         * {len(no_answer)} did not answer
-        * {success_count} succeeded
-            """
+        * {len(success)} succeeded"""
     )
 
     print("slow results:")
-    print(slow_results)
+    print(slow)
 
     print("incorrect results:")
-    print(failed_wrong_results)
+    print(wrong)
 
     print("gpu errors:")
-    print(error_gpus)
+    print(gpu_error)
 
     print("no_answer:")
     print(no_answer)
@@ -193,6 +221,9 @@ def gpu_tester(
     job_timeout=150,
     job_comment=None,
     test_kind="simple_forward",
+    parallel_tests=1,
+    nodelist=None,
+    exclude=None,
 ):
     """gpu tester main function"""
     if cluster != "slurm":
@@ -202,7 +233,26 @@ def gpu_tester(
     if not os.path.isdir(output_folder):
         os.mkdir(output_folder)
 
-    run_test(output_folder, job_name, partition, nodes, gpu_per_node, job_comment, job_timeout, test_kind)
+    all_results = {}
+    with ThreadPool(parallel_tests) as p:
+        for result in p.imap_unordered(
+            lambda x: run_test(
+                output_folder + "/" + str(x),
+                job_name,
+                partition,
+                nodes,
+                gpu_per_node,
+                job_comment,
+                job_timeout,
+                test_kind,
+                nodelist,
+                exclude,
+            ),
+            range(parallel_tests),
+        ):
+            all_results.update(result)
+
+    display_results(all_results)
 
 
 def main():
