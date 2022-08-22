@@ -47,6 +47,7 @@ def main():
             optimizer.step()
         d = time.time() - t
         print("result", hostname, local_rank, outputs.detach().cpu().numpy()[0][0], d)
+        time.time(15)
     except RuntimeError as err:
         print("gpu_error", hostname, local_rank)
         print(err)
