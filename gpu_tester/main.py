@@ -103,24 +103,8 @@ srun {scomment} --cpu_bind=v --accel-bind=gn python -m gpu_tester.{worker}
 """
 
 
-def gpu_tester(
-    cluster="slurm",
-    job_name="gpu_tester",
-    partition="compute-od-gpu",
-    gpu_per_node=8,
-    nodes=1,
-    output_folder=None,
-    job_timeout=150,
-    job_comment=None,
-    test_kind="simple_forward",
-):
-    """gpu tester main function"""
-    if cluster != "slurm":
-        raise ValueError("only slurm is supported currently")
-    if output_folder is None:
-        output_folder = os.getcwd() + "/results"
-    if not os.path.isdir(output_folder):
-        os.mkdir(output_folder)
+def run_test(output_folder, job_name, partition, nodes, gpu_per_node, job_comment, job_timeout, test_kind):
+    """run test"""
     tmp_file = output_folder + "/sbatch_output"
     sbatch_content = generate_sbatch(job_name, partition, nodes, gpu_per_node, tmp_file, job_comment, test_kind)
     sbatch_file = output_folder + "/sbatch_file"
@@ -164,7 +148,9 @@ def gpu_tester(
     elif test_kind == "ddp":
         expected_value = None
         expected_delay = 5
-    failed_wrong_results = [r for r in parsed_results if expected_value is not None and abs(float(r[3]) - float(expected_value)) > 0.01]
+    failed_wrong_results = [
+        r for r in parsed_results if expected_value is not None and abs(float(r[3]) - float(expected_value)) > 0.01
+    ]
     slow_results = [r for r in parsed_results if float(r[4]) > expected_delay]
 
     failed_count = len(failed_wrong_results)
@@ -195,6 +181,28 @@ def gpu_tester(
 
     print("no_answer:")
     print(no_answer)
+
+
+def gpu_tester(
+    cluster="slurm",
+    job_name="gpu_tester",
+    partition="compute-od-gpu",
+    gpu_per_node=8,
+    nodes=1,
+    output_folder=None,
+    job_timeout=150,
+    job_comment=None,
+    test_kind="simple_forward",
+):
+    """gpu tester main function"""
+    if cluster != "slurm":
+        raise ValueError("only slurm is supported currently")
+    if output_folder is None:
+        output_folder = os.getcwd() + "/results"
+    if not os.path.isdir(output_folder):
+        os.mkdir(output_folder)
+
+    run_test(output_folder, job_name, partition, nodes, gpu_per_node, job_comment, job_timeout, test_kind)
 
 
 def main():
