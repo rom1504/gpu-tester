@@ -41,12 +41,9 @@ def start_job(sbatch_file):
 
 def get_boilerplate():
     return """
-module load intelmpi
-source /opt/intel/mpi/latest/env/vars.sh
-export LD_LIBRARY_PATH=/opt/aws-ofi-nccl/lib:/opt/amazon/efa/lib64:/usr/local/cuda-11.0/efa/lib:/usr/local/cuda-11.0/lib:/usr/local/cuda-11.0/lib64:/usr/local/cuda-11.0:/opt/nccl/build/lib:/opt/aws-ofi-nccl-install/lib:/opt/aws-ofi-nccl/lib:$LD_LIBRARY_PATH
+
+export CUDA_VISIBLE_DEVICES=0,1,2,3
 export NCCL_PROTO=simple
-export PATH=/opt/amazon/efa/bin:$PATH
-export LD_PRELOAD="/opt/nccl/build/lib/libnccl.so"
 
 export FI_EFA_FORK_SAFE=1
 export FI_LOG_LEVEL=1
@@ -90,6 +87,8 @@ def generate_sbatch(job_name, partition, nodes, gpu_per_node, output_file, job_c
 
     return f"""#!/bin/bash
 #SBATCH --partition={partition}
+#SBATCH --reservation=laionize
+#SBATCH --account=laionize
 #SBATCH --job-name={job_name}
 #SBATCH --nodes {nodes}
 #SBATCH --ntasks-per-node {ntasks_per_node}
@@ -145,7 +144,7 @@ def run_test(
     if len(hosts) == 0:
         raise ValueError("failed" + result_output)
     hosts = hosts[0].split(" ")[1:]
-    hosts_gpus = [h + " " + str(gpu) for gpu in range(8) for h in hosts]
+    hosts_gpus = [h + " " + str(gpu) for gpu in range(4) for h in hosts]
 
     status_dict = {}
 
@@ -167,7 +166,7 @@ def run_test(
         expected_delay = 5
     elif test_kind == "ddp":
         expected_value = None
-        expected_delay = 5
+        expected_delay = 30
 
     for r in parsed_results:
         name = r[1] + " " + r[2]
@@ -188,6 +187,11 @@ def display_results(status_dict):
     wrong = [x for x, y in status_dict.items() if y[0] == "wrong"]
     gpu_error = [x for x, y in status_dict.items() if y[0] == "gpu_error"]
     no_answer = [x for x, y in status_dict.items() if y[0] == "no_answer"]
+    import json
+    import calendar;
+    import time;
+    ts = calendar.timegm(time.gmtime())
+    json.dump(success, open("succeed"+str(ts)+".json", "w"))
 
     print(
         f"""on a total of {len(status_dict)}:
