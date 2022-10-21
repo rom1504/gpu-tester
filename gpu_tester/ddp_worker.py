@@ -20,7 +20,7 @@ def main():
     os.environ["RANK"] = str(global_rank)
     os.environ["WORLD_SIZE"] = str(world_size)
 
-    hostname = socket.gethostname()
+    hostname = socket.gethostname().replace(".juwels","")
     try:
         # create default process group
         dist.init_process_group("nccl", rank=global_rank, world_size=world_size)
@@ -47,7 +47,7 @@ def main():
             optimizer.step()
         d = time.time() - t
         print("result", hostname, local_rank, outputs.detach().cpu().numpy()[0][0], d)
-        time.time(15)
+        time.sleep(15)
     except RuntimeError as err:
         print("gpu_error", hostname, local_rank)
         print(err)
