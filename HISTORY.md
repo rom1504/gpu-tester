@@ -1,3 +1,10 @@
+## 1.2.0
+
+* add job_account
+* change timeout a bit
+* avoid doing too many sbatch at once
+* aggregate the output per node
+
 ## 1.1.1
 
 * Make ddp worker wait a bit to avoid stopping before having time to start all
