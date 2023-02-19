@@ -194,16 +194,16 @@ def display_results(status_dict):
     )
 
     print("slow results:")
-    print(slow)
+    print(",".join(slow))
 
     print("incorrect results:")
-    print(wrong)
+    print(",".join(wrong))
 
     print("gpu errors:")
-    print(gpu_error)
+    print(",".join(gpu_error))
 
     print("no_answer:")
-    print(no_answer)
+    print(",".join(no_answer))
 
 
 def gpu_tester(
@@ -237,7 +237,7 @@ def gpu_tester(
     with ThreadPool(parallel_tests) as p:
         for result in p.imap_unordered(
             lambda x: wait_then_run(
-                wait_time=5 * (x // 10),  # 10 concurrent, first wait 0, second wait 2, third 4, ...
+                wait_time=7 * (x // 10),  # 10 concurrent, first wait 0, second wait 7, third 14, ...
                 params={
                     "output_folder": output_folder + "/" + str(x),
                     "job_name": job_name,
