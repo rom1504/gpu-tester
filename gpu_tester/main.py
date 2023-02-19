@@ -41,29 +41,8 @@ def start_job(sbatch_file):
 
 def get_boilerplate():
     return """
-module load intelmpi
-source /opt/intel/mpi/latest/env/vars.sh
-export LD_LIBRARY_PATH=/opt/aws-ofi-nccl/lib:/opt/amazon/efa/lib64:/usr/local/cuda-11.0/efa/lib:/usr/local/cuda-11.0/lib:/usr/local/cuda-11.0/lib64:/usr/local/cuda-11.0:/opt/nccl/build/lib:/opt/aws-ofi-nccl-install/lib:/opt/aws-ofi-nccl/lib:$LD_LIBRARY_PATH
-export NCCL_PROTO=simple
-export PATH=/opt/amazon/efa/bin:$PATH
-export LD_PRELOAD="/opt/nccl/build/lib/libnccl.so"
-
-export FI_EFA_FORK_SAFE=1
-export FI_LOG_LEVEL=1
-export FI_EFA_USE_DEVICE_RDMA=1 # use for p4dn
-
-export NCCL_DEBUG=info
-
-export PYTHONFAULTHANDLER=1
-
-export CUDA_LAUNCH_BLOCKING=0
-export OMPI_MCA_mtl_base_verbose=1
-export FI_EFA_ENABLE_SHM_TRANSFER=0
-export FI_PROVIDER=efa
-export FI_EFA_TX_MIN_CREDITS=64
-export NCCL_TREE_THRESHOLD=0
-export TORCH_CPP_LOG_LEVEL=INFO
-export TORCH_DISTRIBUTED_DEBUG=INFO
+module load openmpi
+module load cuda/11.7
 
 # sent to sub script
 export HOSTNAMES=`scontrol show hostnames "$SLURM_JOB_NODELIST"`
@@ -76,14 +55,16 @@ echo go $COUNT_NODE
 """
 
 
-def generate_sbatch(job_name, partition, nodes, gpu_per_node, output_file, job_comment, test_kind, nodelist, exclude):
+def generate_sbatch(
+    job_name, partition, nodes, gpu_per_node, output_file, job_comment, test_kind, nodelist, exclude, job_account
+):
     """generate sbatch"""
     ntasks_per_node = gpu_per_node
-    gres = f"gpu:{gpu_per_node}"
     constant_boilerplate = get_boilerplate()
     venv = os.environ["VIRTUAL_ENV"]
     scomment = ("--comment " + job_comment) if job_comment is not None else ""
     sbatch_scomment = ("#SBATCH --comment " + job_comment) if job_comment is not None else ""
+    sbatch_saccount = ("#SBATCH --account " + job_account) if job_account is not None else ""
     worker = test_kind + "_worker"
     nodelist = ("#SBATCH --nodelist " + nodelist) if nodelist is not None else ""
     exclude = ("#SBATCH --exclude " + exclude) if exclude is not None else ""
@@ -93,10 +74,10 @@ def generate_sbatch(job_name, partition, nodes, gpu_per_node, output_file, job_c
 #SBATCH --job-name={job_name}
 #SBATCH --nodes {nodes}
 #SBATCH --ntasks-per-node {ntasks_per_node}
-#SBATCH --gres={gres}
 #SBATCH --output={output_file}
 #SBATCH --exclusive
 {sbatch_scomment}
+{sbatch_saccount}
 {nodelist}
 {exclude}
 
@@ -110,7 +91,17 @@ srun {scomment} --cpu_bind=v --accel-bind=gn python -m gpu_tester.{worker}
 
 
 def run_test(
-    output_folder, job_name, partition, nodes, gpu_per_node, job_comment, job_timeout, test_kind, nodelist, exclude
+    output_folder,
+    job_name,
+    partition,
+    nodes,
+    gpu_per_node,
+    job_comment,
+    job_timeout,
+    test_kind,
+    nodelist,
+    exclude,
+    job_account,
 ):
     """run test"""
 
@@ -119,7 +110,7 @@ def run_test(
 
     tmp_file = output_folder + "/sbatch_output"
     sbatch_content = generate_sbatch(
-        job_name, partition, nodes, gpu_per_node, tmp_file, job_comment, test_kind, nodelist, exclude
+        job_name, partition, nodes, gpu_per_node, tmp_file, job_comment, test_kind, nodelist, exclude, job_account
     )
     sbatch_file = output_folder + "/sbatch_file"
     with open(sbatch_file, "w", encoding="utf8") as f:
@@ -183,14 +174,18 @@ def run_test(
 
 def display_results(status_dict):
     """display results"""
-    success = [x for x, y in status_dict.items() if y[0] == "success"]
-    slow = [x for x, y in status_dict.items() if y[0] == "slow"]
-    wrong = [x for x, y in status_dict.items() if y[0] == "wrong"]
-    gpu_error = [x for x, y in status_dict.items() if y[0] == "gpu_error"]
-    no_answer = [x for x, y in status_dict.items() if y[0] == "no_answer"]
+
+    per_node = {}
+    for gpu, status in status_dict.items():
+        per_node[gpu.split(" ")[0]] = status
+    success = [x for x, y in per_node.items() if y[0] == "success"]
+    slow = [x for x, y in per_node.items() if y[0] == "slow"]
+    wrong = [x for x, y in per_node.items() if y[0] == "wrong"]
+    gpu_error = [x for x, y in per_node.items() if y[0] == "gpu_error"]
+    no_answer = [x for x, y in per_node.items() if y[0] == "no_answer"]
 
     print(
-        f"""on a total of {len(status_dict)}:
+        f"""on a total of {len(per_node)}:
         * {len(wrong)} have incorrect results
         * {len(slow)} have slow results
         * {len(gpu_error)} have gpu errors
@@ -224,6 +219,7 @@ def gpu_tester(
     parallel_tests=1,
     nodelist=None,
     exclude=None,
+    job_account=None,
 ):
     """gpu tester main function"""
     if cluster != "slurm":
@@ -233,20 +229,28 @@ def gpu_tester(
     if not os.path.isdir(output_folder):
         os.mkdir(output_folder)
 
+    def wait_then_run(wait_time, params):
+        time.sleep(wait_time)
+        return run_test(**params)
+
     all_results = {}
     with ThreadPool(parallel_tests) as p:
         for result in p.imap_unordered(
-            lambda x: run_test(
-                output_folder + "/" + str(x),
-                job_name,
-                partition,
-                nodes,
-                gpu_per_node,
-                job_comment,
-                job_timeout,
-                test_kind,
-                nodelist,
-                exclude,
+            lambda x: wait_then_run(
+                wait_time=5 * (x // 10),  # 10 concurrent, first wait 0, second wait 2, third 4, ...
+                params={
+                    "output_folder": output_folder + "/" + str(x),
+                    "job_name": job_name,
+                    "partition": partition,
+                    "nodes": nodes,
+                    "gpu_per_node": gpu_per_node,
+                    "job_comment": job_comment,
+                    "job_timeout": job_timeout,
+                    "test_kind": test_kind,
+                    "nodelist": nodelist,
+                    "exclude": exclude,
+                    "job_account": job_account,
+                },
             ),
             range(parallel_tests),
         ):

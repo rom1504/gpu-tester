@@ -1,1 +1,1 @@
-gpu_tester --nodes 2 --parallel-tests 103 --job_comment laion --partition "gpu" --test_kind "ddp" --job_timeout 45 --exclude 'gpu-st-p4d-24xlarge-[66]'
+gpu_tester --nodes 2 --parallel-tests 100 --job_account openclip --partition "g40423" --test_kind "ddp" --job_timeout 90

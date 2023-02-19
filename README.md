@@ -87,6 +87,7 @@ This module exposes a single function `gpu_tester` which takes the same argument
 * **output_folder** the output folder. (default *None* which means current folder / results)
 * **job_timeout** job timeout (default *150* seconds)
 * **job_comment** optional comment arg given to slurm (default *None*)
+* **job_account** optional account arg given to slurm (default *None*)
 * **test_kind** simple_forward or ddp. simple_forward is quick forward test. DDP uses pytorch ddp to check gpu interconnect (default *simple_forward*)
 * **parallel_tests** number of tests to run in parallel. Recommended to use that with nodes == 2 to test pair by pair (default *1*)
 * **nodelist** node whitelist, example 'gpu-st-p4d-24xlarge-[66-67]' (default *None*)

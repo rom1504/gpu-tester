@@ -35,7 +35,7 @@ def main():
         inputs = torch.randn(200, 1000).to(local_rank)
         labels = torch.randn(200, 1000).to(local_rank)
         # warmup
-        for _ in range(10):
+        for _ in range(100):
             outputs = ddp_model(inputs)
             loss_fn(outputs, labels).backward()
             optimizer.step()
@@ -47,7 +47,7 @@ def main():
             optimizer.step()
         d = time.time() - t
         print("result", hostname, local_rank, outputs.detach().cpu().numpy()[0][0], d)
-        time.time(15)
+        time.sleep(45)
     except RuntimeError as err:
         print("gpu_error", hostname, local_rank)
         print(err)

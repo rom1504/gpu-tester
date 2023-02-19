@@ -1,4 +1,5 @@
 *.egg-info
+.nenv
 .vscode
 .env
 __pycache__
